@@ -140,6 +140,28 @@
       border-bottom: none;
     }
 
+    /* General styles for delete buttons */
+    button.delete-btn {
+      cursor: pointer;           /* Changes cursor to pointer on hover */
+      margin-left: 10px;         /* Spacing from other elements */
+      padding: 5px 10px;         /* Adds padding for clickability */
+      background-color: #e74c3c; /* Red background for delete action */
+      color: white;              /* White text for contrast */
+      border: none;              /* Removes default browser borders */
+      border-radius: 5px;        /* Rounds the corners */
+      font-size: 0.9rem;         /* Slightly smaller font size */
+      transition: background-color 0.3s ease; /* Smooth hover effect */
+    }
+
+    button.delete-btn:hover {
+      background-color: #c0392b; /* Darker red on hover */
+    }
+
+    /* Optional additional styling for category list */
+    #categoryList li {
+      margin-bottom: 5px; /* Adds spacing between category list items */
+    }
+
     /* Pie chart */
     .chart-container {
       margin: 20px 0;
@@ -194,6 +216,26 @@
       <input type="date" id="date">
       <button onclick="addTransaction()">Add Transaction</button>
     </div>
+    <div class="category-management">
+      <h3>Manage Categories</h3>
+      <label for="newCategoryName">Category Name</label>
+      <input type="text" id="newCategoryName" placeholder="e.g., Utilities">
+      
+      <label for="newCategoryType">Type</label>
+      <select id="newCategoryType">
+        <option value="add">Adds to Income</option>
+        <option value="subtract">Subtracts from Income</option>
+      </select>
+
+      <label for="newCategoryColor">Color</label>
+      <input type="color" id="newCategoryColor" value="#FF6384">
+      
+      <button onclick="addCategory()">Add Category</button>
+
+      <!-- Delete Category Section -->
+      <h3>Delete Categories</h3>
+      <ul id="categoryList" style="list-style-type: none; padding: 0;"></ul>
+    </div>
     <div class="buttons">
         <button onclick="saveToFile()">Save to File</button>
         <button onclick="exportToExcel()">Export to Excel</button>
@@ -209,6 +251,17 @@
       <canvas id="categoryPieChart"></canvas>
     </div>
     <div class="transaction-list">
+      <h3>Transactions</h3>
+      <!-- Sorting dropdown -->
+      <label for="sortCriteria">Sort By:</label>
+      <select id="sortCriteria" onchange="sortAndRenderTransactions()">
+        <option value="date-asc">Date (Oldest to Newest)</option>
+        <option value="date-desc">Date (Newest to Oldest)</option>
+        <option value="amount-asc">Amount (Lowest to Highest)</option>
+        <option value="amount-desc">Amount (Highest to Lowest)</option>
+        <option value="category-date">Category by Date</option>
+        <option value="category-amount">Category by Amount</option>
+      </select>
       <ul id="transactionList"></ul>
     </div>
     <div style="text-align: right; margin-top: 20px;">
@@ -217,16 +270,39 @@
       <script>
         function renderTransactions() {
           const transactionList = document.getElementById("transactionList");
-          transactionList.innerHTML = "";
+          transactionList.innerHTML = ""; // Clear the list
+        
           transactions.forEach((transaction, index) => {
             const li = document.createElement("li");
             li.className = "transaction-item";
-            li.innerHTML = `
-              <div>${transaction.date} - ${transaction.description} ($${transaction.amount}) - ${transaction.category}</div>
-              <button onclick="deleteTransaction(${index})">Delete</button>
+        
+            // Define dynamic variables for display
+            const color = transaction.category.toLowerCase() === "income" ? "green" : "red";
+            const capitalizedCategory =
+              transaction.category.charAt(0).toUpperCase() + transaction.category.slice(1).toLowerCase();
+            const displayAmount = `$${Math.abs(transaction.amount).toFixed(2)}`;
+        
+            // Create a div for transaction details
+            const div = document.createElement("div");
+            div.innerHTML = `
+              ${transaction.date || "No Date"} - ${transaction.description || "No Description"} 
+              (<span style="color: ${color};">${displayAmount}</span>) - ${capitalizedCategory || "No Category"}
             `;
+        
+            // Create a delete button
+            const deleteButton = document.createElement("button");
+            deleteButton.textContent = "Delete";
+            deleteButton.style.marginLeft = "10px";
+            deleteButton.className = "delete-btn"; // Add a CSS class for styling
+            deleteButton.onclick = () => deleteTransaction(index); // Attach the delete functionality
+        
+            // Append elements to the list item
+            li.appendChild(div);
+            li.appendChild(deleteButton);
             transactionList.appendChild(li);
           });
+        
+          console.log("Rendered transactions:", transactions); // Debugging
         }
       </script>
   </div>
@@ -244,6 +320,137 @@
     others: 0,
   };
   let pieChart;
+  let currentSortCriteria = "date-asc";
+
+  function sortAndRenderTransactions() {
+    const sortCriteria = document.getElementById("sortCriteria").value;
+  
+    switch (sortCriteria) {
+      case "date-asc":
+        transactions.sort((a, b) => new Date(a.date) - new Date(b.date));
+        break;
+      case "date-desc":
+        transactions.sort((a, b) => new Date(b.date) - new Date(a.date));
+        break;
+      case "category":
+        transactions.sort((a, b) => a.category.localeCompare(b.category));
+        break;
+      case "amount-asc":
+        transactions.sort((a, b) => a.amount - b.amount);
+        break;
+      case "amount-desc":
+        transactions.sort((a, b) => b.amount - a.amount);
+        break;
+      case "category-date":
+        transactions.sort((a, b) => {
+          if (a.category === b.category) {
+            return new Date(a.date) - new Date(b.date);
+          }
+          return a.category.localeCompare(b.category);
+        });
+        break;
+      case "category-amount":
+        transactions.sort((a, b) => {
+          if (a.category === b.category) {
+            return a.amount - b.amount;
+          }
+          return a.category.localeCompare(b.category);
+        });
+        break;
+      default:
+        break;
+    }
+  
+    // Render transactions without additional sorting
+    renderTransactions(false);
+  }
+  let customCategories = {}; // Store custom categories and their types
+
+  function addCategory() {
+    const name = document.getElementById("newCategoryName").value.trim();
+    const type = document.getElementById("newCategoryType").value;
+    const color = document.getElementById("newCategoryColor").value;
+
+    if (!name) {
+      alert("Please enter a category name!");
+      return;
+    }
+
+    // Ensure category name is unique
+    if (customCategories[name] || categoryExpenses[name]) {
+      alert("Category already exists!");
+      return;
+    }
+
+    // Capitalize first letter of category name
+    const categoryName = name.charAt(0).toUpperCase() + name.slice(1);
+
+    // Add the category with type and color
+    customCategories[categoryName] = { type, color };
+    categoryExpenses[categoryName] = 0;
+
+    // Add category to the dropdown
+    const categorySelect = document.getElementById("category");
+    const option = document.createElement("option");
+    option.value = categoryName;
+    option.text = categoryName;
+    categorySelect.appendChild(option);
+
+    // Update the category list for deletion
+    updateCategoryList();
+
+    alert(`Category "${categoryName}" added successfully!`);
+
+    // Clear the input fields
+    document.getElementById("newCategoryName").value = "";
+  }
+
+  function deleteCategory(categoryName) {
+    // Remove category from customCategories and categoryExpenses
+    delete customCategories[categoryName];
+    delete categoryExpenses[categoryName];
+  
+    // Remove category from dropdown
+    const categorySelect = document.getElementById("category");
+    for (let i = 0; i < categorySelect.options.length; i++) {
+      if (categorySelect.options[i].value === categoryName) {
+        categorySelect.remove(i);
+        break;
+      }
+    }
+  
+    // Update the category list for deletion
+    updateCategoryList();
+  
+    // Update the pie chart to reflect changes
+    updatePieChart();
+  
+    alert(`Category "${categoryName}" deleted successfully!`);
+  }
+
+  function updateCategoryList() {
+    const categoryList = document.getElementById("categoryList");
+    categoryList.innerHTML = ""; // Clear the list
+  
+    Object.keys(customCategories).forEach((category) => {
+      const li = document.createElement("li");
+  
+      // Add category name
+      const categoryText = document.createTextNode(category);
+      li.appendChild(categoryText);
+  
+      // Create the delete button
+      const deleteButton = document.createElement("button");
+      deleteButton.textContent = "Delete";
+      deleteButton.className = "delete-btn"; // Add the CSS class
+      deleteButton.onclick = () => deleteCategory(category); // Attach delete functionality
+  
+      li.appendChild(deleteButton);
+      categoryList.appendChild(li);
+    });
+
+    console.log("Updated category list:", customCategories); // Debugging
+  }
 
   function addTransaction() {
     const description = document.getElementById("description").value;
@@ -251,41 +458,88 @@
     const category = document.getElementById("category").value;
     const date = document.getElementById("date").value;
   
-    if (!description || isNaN(amount) || !date) {
+    if (!description || isNaN(amount) || !date || !category) {
       alert("Please fill out all fields!");
       return;
     }
   
-    transactions.push({ description, amount, category, date });
+    const transaction = { description, amount, category, date };
+    transactions.push(transaction);
+
+    console.log("Transaction added:", transaction); // Debugging
+    console.log("Transactions Array after addition:", transactions); // Debugging
   
-    // Update category totals
-    if (category === "income") {
-      categoryExpenses.income += amount; // Add to income
-    } else {
-      categoryExpenses[category] += amount; // Add to expense
+    // Update category expenses
+    if (!categoryExpenses.hasOwnProperty(category)) {
+      categoryExpenses[category] = 0;
     }
+
+    const type = customCategories[category] || "subtract"; // Default to expense
+    if (type === "add") {
+      categoryExpenses[category] += amount; // Add to income
+    } else {
+      categoryExpenses[category] -= amount; // Subtract from income
+    }
+
+    console.log("Transaction added:", transaction); // Debugging
+    console.log("Updated category expenses:", categoryExpenses); // Debugging
   
-    renderTransactions();
-    updatePieChart();
-    clearForm();
+    // Sort and render transactions automatically
+    sortAndRenderTransactions();
+
+    updatePieChart(); // Update pie chart with new data
+
+    clearForm(); // Clear the input form
   }
 
-  function renderTransactions() {
+  function renderTransactions(shouldSort = true) {
+    console.log("Rendering transactions..."); // Log when the function is called
+    console.log("Transactions Array at render start:", transactions); // Log the state of the transactions array
+  
     const transactionList = document.getElementById("transactionList");
-    transactionList.innerHTML = "";
+    transactionList.innerHTML = ""; // Clear the existing list
+
+    // Sort transactions if not already sorted
+    if (shouldSort) {
+      console.log("Sorting transactions before rendering...");
+      sortAndRenderTransactions(); // Ensure sorting happens only once
+    }
+
     transactions.forEach((transaction, index) => {
+      console.log(`Rendering transaction ${index + 1}:`, transaction); // Debugging
+
       const li = document.createElement("li");
       li.className = "transaction-item";
-      li.innerHTML = `
-        <div>${transaction.date} - ${transaction.description} ($${transaction.amount}) - ${transaction.category}</div>
-        <button onclick="deleteTransaction(${index})">Delete</button>
+
+      // Capitalize the first letter of the category name
+      const capitalizedCategory = transaction.category.charAt(0).toUpperCase() + transaction.category.slice(1).toLowerCase();
+
+      // Create a div for transaction details
+      const div = document.createElement("div");
+      const color = transaction.category.toLowerCase() === "income" ? "green" : "red";
+      const displayAmount = `$${Math.abs(transaction.amount).toFixed(2)}`; // Always show absolute value
+
+      div.innerHTML = `
+        ${transaction.date || "No Date"} - ${transaction.description || "No Description"} 
+        (<span style="color: ${color};">${displayAmount}</span>) - ${capitalizedCategory || "No Category"}
       `;
+
+      // Create the delete button
+      const deleteButton = document.createElement("button");
+      deleteButton.textContent = "Delete";
+      deleteButton.className = "delete-btn"; // Add the CSS class
+      deleteButton.onclick = () => deleteTransaction(index); // Attach delete functionality
+
+      li.appendChild(div);
+      li.appendChild(deleteButton);
       transactionList.appendChild(li);
     });
+
+    console.log("Finished rendering transactions."); // Log when the function completes
   }
 
   // Save transactions to a JSON file
-function saveToFile() {
+  function saveToFile() {
     const blob = new Blob([JSON.stringify(transactions)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -305,9 +559,14 @@ function saveToFile() {
   // Load transactions from an Excel file
   function loadFromFile(event) {
     const file = event.target.files[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = function (e) {
+    if (!file) {
+      alert("No file selected!");
+      return;
+    }
+  
+    const reader = new FileReader();
+    reader.onload = function (e) {
+      try {
         const data = e.target.result;
   
         // Read the workbook from the binary data
@@ -318,7 +577,22 @@ function saveToFile() {
         // Convert sheet to JSON
         const json = XLSX.utils.sheet_to_json(sheet);
   
-        // Reset categoryExpenses to start fresh
+        if (!json.length) {
+          alert("The file is empty or not formatted correctly!");
+          return;
+        }
+  
+        // Process the transactions
+        transactions = json.map((transaction, index) => ({
+          description: transaction.description || `Unnamed Transaction ${index + 1}`,
+          amount: parseFloat(transaction.amount) || 0,
+          category: transaction.category || "others",
+          date: transaction.date || new Date().toISOString().split("T")[0],
+        }));
+  
+        console.log("Transactions Array after loading:", transactions); // Debugging
+  
+        // Reset category expenses
         categoryExpenses = {
           income: 0,
           groceries: 0,
@@ -327,45 +601,29 @@ function saveToFile() {
           others: 0,
         };
   
-        // Process the transactions and rebuild data
-        transactions = []; // Clear the transactions array
-        json.forEach((transaction, index) => {
-          const amount = parseFloat(transaction.amount);
-          const category = transaction.category;
-          const description = transaction.description || "";
-          const date = transaction.date || "";
-  
-          // Validate data
-          if (!category || typeof category !== "string") {
-            console.error(`Invalid category at row ${index + 1}:`, transaction);
-            return; // Skip invalid transaction
+        // Update category expenses
+        transactions.forEach((transaction) => {
+          if (!categoryExpenses.hasOwnProperty(transaction.category)) {
+            categoryExpenses[transaction.category] = 0; // Dynamically add new categories
           }
-          if (isNaN(amount)) {
-            console.error(`Invalid amount at row ${index + 1}:`, transaction);
-            return; // Skip invalid transaction
-          }
-  
-          // Ensure the category exists in categoryExpenses
-          if (!categoryExpenses.hasOwnProperty(category)) {
-            categoryExpenses[category] = 0; // Dynamically add new categories if needed
-          }
-  
-          // Add the transaction to the list
-          transactions.push({ description, amount, category, date });
-  
-          // Update the category total
-          categoryExpenses[category] += amount;
+          categoryExpenses[transaction.category] += transaction.amount;
         });
   
-        // Update the UI
-        renderTransactions();
+        // Sort and render transactions based on current criteria
+        sortAndRenderTransactions();
+  
+        // Update the pie chart with new data
         updatePieChart();
   
         // Reset the file input to allow reloading the same file
-        event.target.value = "";
-      };
-      reader.readAsBinaryString(file);
-    }
+        event.target.value = ""; // Clear the file input value
+      } catch (error) {
+        console.error("Error loading file:", error);
+        alert("An error occurred while loading the file. Please check the console for details.");
+      }
+    };
+  
+    reader.readAsBinaryString(file);
   }
 
   function clearTransactions() {
@@ -415,83 +673,73 @@ function saveToFile() {
   }
 
   function updatePieChart() {
+    console.log("Updating pie chart...");
+  
     const ctx = document.getElementById("categoryPieChart").getContext("2d");
   
-    // Calculate the total income and total expenses
-    const totalIncome = categoryExpenses.income;
-    const totalExpenses = Object.keys(categoryExpenses)
-      .filter((key) => key !== "income")
-      .reduce((sum, key) => sum + Math.abs(categoryExpenses[key]), 0);
+    // Calculate the income base and total expenses
+    const income = Math.abs(categoryExpenses.income || 0);
+    const expenseCategories = Object.keys(categoryExpenses).filter(
+      (category) => customCategories[category] !== "add" && category !== "income"
+    );
+
+    const expenses = expenseCategories.map((category) => ({
+      category,
+      amount: Math.abs(categoryExpenses[category] || 0),
+      color: customCategories[category]?.color || "#FF6384", // Default color
+    }));
   
-    // If there's no income, reset the pie chart
-    if (totalIncome === 0) {
-      if (pieChart) {
-        pieChart.destroy();
-        pieChart = null;
-      }
-      return; // Exit the function as there's nothing to display
+    const totalExpenses = expenses.reduce((sum, expense) => sum + expense.amount, 0);
+  
+    // If there's no income, avoid division by zero
+    if (income === 0) {
+      console.warn("Income is zero. Pie chart cannot be updated.");
+      if (pieChart) pieChart.destroy();
+      return;
     }
   
-    // Prepare data and labels for the chart
-    const data = [];
-    const labels = [];
+    // Prepare data for the pie chart
+    const data = [income - totalExpenses, ...expenses.map((e) => e.amount)];
+    const labels = ["Remaining Income", ...expenses.map((e) => e.category)];
+    const colors = ["#36A2EB", ...expenses.map((e) => e.color)];
   
-    // Calculate remaining income and percentages
-    const remainingIncome = totalIncome - totalExpenses;
-    const remainingIncomePercentage = (remainingIncome / totalIncome) * 100;
+    console.log("Pie chart data:", data);
+    console.log("Pie chart labels:", labels);
   
-    // Add income as the base
-    data.push(remainingIncome);
-    labels.push(`Income (Base): ${remainingIncomePercentage.toFixed(2)}% ($${remainingIncome.toFixed(2)})`);
-  
-    // Add expenses as portions of the total income
-    Object.keys(categoryExpenses).forEach((key) => {
-      if (key !== "income" && categoryExpenses[key] !== 0) {
-        const percentage = (Math.abs(categoryExpenses[key]) / totalIncome) * 100;
-        data.push(Math.abs(categoryExpenses[key])); // Use absolute value for chart data
-        labels.push(`${key}: ${percentage.toFixed(2)}% (-$${Math.abs(categoryExpenses[key]).toFixed(2)})`);
-      }
-    });
-  
-    // Destroy the existing chart if it exists
     if (pieChart) {
-      pieChart.destroy();
-    }
-  
-    // Create a new pie chart
-    pieChart = new Chart(ctx, {
-      type: "pie",
-      data: {
-        labels: labels,
-        datasets: [
-          {
-            data: data,
-            backgroundColor: [
-              "#36A2EB", // Income
-              "#FF6384", // Groceries
-              "#FFCE56", // Rent
-              "#4BC0C0", // Entertainment
-              "#9966FF", // Others
-            ],
-          },
-        ],
-      },
-      options: {
-        responsive: true,
-        plugins: {
-          legend: {
-            position: "bottom",
-          },
-          tooltip: {
-            callbacks: {
-              label: function (tooltipItem) {
-                return `${labels[tooltipItem.dataIndex]}`;
+      pieChart.data.labels = labels;
+      pieChart.data.datasets[0].data = data;
+      pieChart.data.datasets[0].backgroundColor = colors;
+      pieChart.update();
+    } else {
+      pieChart = new Chart(ctx, {
+        type: "pie",
+        data: {
+          labels: labels,
+          datasets: [
+            {
+              data: data,
+              backgroundColor: colors,
+            },
+          ],
+        },
+        options: {
+          plugins: {
+            legend: { position: "bottom" },
+            tooltip: {
+              callbacks: {
+                label: function (tooltipItem) {
+                  const value = data[tooltipItem.dataIndex];
+                  const total = data.reduce((acc, val) => acc + Math.abs(val), 0);
+                  const percentage = ((Math.abs(value) / total) * 100).toFixed(2);
+                  return `${labels[tooltipItem.dataIndex]}: ${percentage}% ($${Math.abs(value).toFixed(2)})`;
+                },
               },
             },
           },
         },
-      },
-    });
+      });
+    }
   }
 
 </script>
